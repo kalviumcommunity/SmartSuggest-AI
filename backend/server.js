@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use("/api/compare", compareRoutes);
+app.use("/compare", compareRoutes);
 
 mongoose.connect(process.env.DB_URL, {
   useNewUrlParser: true,
