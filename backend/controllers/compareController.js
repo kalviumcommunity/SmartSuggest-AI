@@ -14,8 +14,8 @@ const compareZeroShot = async (req, res) => {
       return res.status(400).json({ error: "Provide at least two products" });
     }
 
-    const cached = await Query.findOne({ query: products.join(" vs ") });
-    if (cached) return res.json(cached.response);
+    // const cached = await Query.findOne({ query: products.join(" vs ") });
+    // if (cached) return res.json(cached.response);
 
     const toolsData = await Tool.find({ name: { $in: products } });
 
@@ -27,7 +27,6 @@ Data: ${JSON.stringify(toolsData)}
 Return JSON in this format:
 {
   "products": [...],
-  "comparison": [{"feature":"", "details": {"Product1":"", "Product2":""}}],
   "recommendation": "short text"
 }
 `;
@@ -74,8 +73,8 @@ const compareOneShot = async (req, res) => {
       return res.status(400).json({ error: "Provide at least two products" });
     }
 
-    const cached = await Query.findOne({ query: products.join(" vs ") });
-    if (cached) return res.json(cached.response);
+    // const cached = await Query.findOne({ query: products.join(" vs ") });
+    // if (cached) return res.json(cached.response);
 
     const toolsData = await Tool.find({ name: { $in: products } });
 
