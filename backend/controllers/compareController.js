@@ -216,5 +216,63 @@ Return JSON in the same format as the examples.
   }
 };
 
+// ---------- SYSTEM + USER PROMPT CONTROLLER ----------
+const compareSystemUser = async (req, res) => {
+  try {
+    const { products, userId } = req.body;
 
-module.exports = { compareZeroShot, compareOneShot, compareMultiShot };
+    if (!products || products.length < 2) {
+      return res.status(400).json({ error: "Provide at least two products" });
+    }
+
+    const cached = await Query.findOne({ query: products.join(" vs ") });
+    if (cached) return res.json(cached.response);
+
+    const toolsData = await Tool.find({ name: { $in: products } });
+
+    const messages = [
+      {
+        role: "system",
+        content: "You are a professional digital product comparison assistant. Always return a JSON object containing 'products', 'comparison' with detailed pros, cons, and key differences, and a 'recommendation'. Be informative and highlight differences clearly."
+      },
+      {
+        role: "user",
+        content: `Compare these products: ${JSON.stringify(products)}. 
+Use this data: ${JSON.stringify(toolsData)}. Return JSON in the format: { "products": [...], "comparison": [{"feature":"", "details": {"Product1":"", "Product2":"", "diff":""}}], "recommendation": "short text" }`
+      }
+    ];
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-chat" });
+    const result = await model.chat(messages);
+
+    let rawText = result.response[0].content;
+
+    let cleanedText = rawText.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```$/, '');
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```$/, '');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedText);
+    } catch (err) {
+      console.error("Failed to parse AI response:", cleanedText);
+      return res.status(500).json({ error: "Invalid JSON from AI" });
+    }
+
+    await Query.create({
+      userId: userId || null,
+      query: products.join(" vs "),
+      response: parsed
+    });
+
+    res.json(parsed);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser };
