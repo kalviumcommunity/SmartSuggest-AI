@@ -1,8 +1,8 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import mongoose from "mongoose";
-import compareRoutes from "./routes/compareRoutes.js";
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const mongoose = require("mongoose");
+const compareRoutes = require("./routes/compareRoutes");
 
 dotenv.config();
 
@@ -12,7 +12,10 @@ app.use(express.json());
 
 app.use("/api/compare", compareRoutes);
 
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.DB_URL, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
   .then(() => console.log("✅ MongoDB connected"))
   .catch(err => console.error("MongoDB error:", err));
 
