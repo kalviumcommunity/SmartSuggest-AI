@@ -343,4 +343,76 @@ Explain your thought process first (step-by-step reasoning), then provide the fi
   }
 };
 
-module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought };
+// ---------- STRUCTURED OUTPUT CONTROLLER ----------
+const compareStructuredOutput = async (req, res) => {
+  try {
+    const { products, userId } = req.body;
+
+    if (!products || products.length < 2) {
+      return res.status(400).json({ error: "Provide at least two products" });
+    }
+
+    const cached = await Query.findOne({ query: products.join(" vs ") });
+    if (cached) return res.json(cached.response);
+
+    const toolsData = await Tool.find({ name: { $in: products } });
+
+    const messages = [
+      {
+        role: "system",
+        content: "You are an expert digital product comparison assistant. Always respond in strict JSON format. Include 'products' (array), 'comparison' (array of features with 'feature', 'details', and 'diff'), and 'recommendation' (string). Do not include extra text."
+      },
+      {
+        role: "user",
+        content: `Compare these products: ${JSON.stringify(products)}. 
+Use this data: ${JSON.stringify(toolsData)}.
+Return JSON in this exact structure:
+{
+  "products": ["Product1", "Product2"],
+  "comparison": [
+    {
+      "feature": "Feature name",
+      "details": {"Product1": "value", "Product2": "value"},
+      "diff": "difference explanation"
+    }
+  ],
+  "recommendation": "short text recommendation"
+}`
+      }
+    ];
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-chat" });
+    const result = await model.chat(messages);
+
+    let rawText = result.response[0].content;
+    let cleanedText = rawText.trim();
+
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```$/, '');
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```$/, '');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedText);
+    } catch (err) {
+      console.error("Failed to parse AI structured output:", cleanedText);
+      return res.status(500).json({ error: "Invalid JSON from AI" });
+    }
+
+    await Query.create({
+      userId: userId || null,
+      query: products.join(" vs "),
+      response: parsed
+    });
+
+    res.json(parsed);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+
+module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought, compareStructuredOutput };
