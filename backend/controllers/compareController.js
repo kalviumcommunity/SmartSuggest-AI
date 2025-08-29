@@ -275,4 +275,73 @@ Use this data: ${JSON.stringify(toolsData)}. Return JSON in the format: { "produ
   }
 };
 
-module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser };
+// ---------- CHAIN-OF-THOUGHT CONTROLLER ----------
+const compareChainOfThought = async (req, res) => {
+  try {
+    const { products, userId } = req.body;
+
+    if (!products || products.length < 2) {
+      return res.status(400).json({ error: "Provide at least two products" });
+    }
+
+    const cached = await Query.findOne({ query: products.join(" vs ") });
+    if (cached) return res.json(cached.response);
+
+    const toolsData = await Tool.find({ name: { $in: products } });
+
+    const messages = [
+      {
+        role: "system",
+        content: "You are an expert digital product comparison assistant. Explain your reasoning step by step before providing the final comparison JSON. Include pros, cons, and key differences for each feature."
+      },
+      {
+        role: "user",
+        content: `Compare these products: ${JSON.stringify(products)}. 
+Use this data: ${JSON.stringify(toolsData)}.
+Explain your thought process first (step-by-step reasoning), then provide the final comparison in JSON format:
+{
+  "products": [...],
+  "comparison": [{"feature":"", "details": {"Product1":"", "Product2":"", "diff":""}}],
+  "recommendation": "short text"
+}`
+      }
+    ];
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-chat" });
+    const result = await model.chat(messages);
+
+    let rawText = result.response[0].content;
+
+    let cleanedText = rawText.trim();
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```$/, '');
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```$/, '');
+    }
+
+    let parsed;
+    try {
+      // Try to extract JSON part if AI included reasoning
+      const jsonStart = cleanedText.indexOf("{");
+      const jsonEnd = cleanedText.lastIndexOf("}") + 1;
+      const jsonString = cleanedText.slice(jsonStart, jsonEnd);
+      parsed = JSON.parse(jsonString);
+    } catch (err) {
+      console.error("Failed to parse AI JSON from chain-of-thought:", cleanedText);
+      return res.status(500).json({ error: "Invalid JSON from AI" });
+    }
+
+    await Query.create({
+      userId: userId || null,
+      query: products.join(" vs "),
+      response: parsed
+    });
+
+    res.json(parsed);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought };
