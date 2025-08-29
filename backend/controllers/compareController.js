@@ -414,5 +414,71 @@ Return JSON in this exact structure:
   }
 };
 
+// ---------- TEMPERATURE CONTROLLER ----------
+const compareWithTemperature = async (req, res) => {
+  try {
+    const { products, userId, temperature } = req.body;
 
-module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought, compareStructuredOutput };
+    if (!products || products.length < 2) {
+      return res.status(400).json({ error: "Provide at least two products" });
+    }
+
+    const toolsData = await Tool.find({ name: { $in: products } });
+
+    const prompt = `
+Compare these products creatively based on their features.
+Products: ${JSON.stringify(products)}
+Data: ${JSON.stringify(toolsData)}
+Return a JSON in this format:
+{
+  "products": [...],
+  "comparison": [
+    {
+      "feature": "",
+      "details": {"Product1":"", "Product2":""},
+      "diff": ""
+    }
+  ],
+  "recommendation": "short text"
+}
+Be as creative or conservative as the temperature allows.
+`;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      temperature: temperature || 0.7 // default
+    });
+
+    const result = await model.generateContent(prompt);
+    let rawText = result.response.text();
+    let cleanedText = rawText.trim();
+
+    if (cleanedText.startsWith("```json")) {
+      cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```$/, '');
+    } else if (cleanedText.startsWith("```")) {
+      cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```$/, '');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanedText);
+    } catch (err) {
+      console.error("Failed to parse AI response:", cleanedText);
+      return res.status(500).json({ error: "Invalid JSON from AI" });
+    }
+
+    await Query.create({
+      userId: userId || null,
+      query: products.join(" vs "),
+      response: parsed
+    });
+
+    res.json(parsed);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+module.exports = { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought, compareStructuredOutput, compareWithTemperature };

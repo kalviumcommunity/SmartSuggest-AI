@@ -1,5 +1,5 @@
 const express = require("express");
-const { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought, compareStructuredOutput } = require("../controllers/compareController");
+const { compareZeroShot, compareOneShot, compareMultiShot, compareSystemUser, compareChainOfThought, compareStructuredOutput, compareWithTemperature } = require("../controllers/compareController");
 
 const router = express.Router();
 
@@ -9,6 +9,7 @@ router.post("/multi-shot", compareMultiShot);
 router.post("/system-user", compareSystemUser);
 router.post("/chain-of-thought", compareChainOfThought);
 router.post("/structured-output", compareStructuredOutput);
+router.post("/compare-with-temp", compareWithTemperature);
 
 
 module.exports = router;
